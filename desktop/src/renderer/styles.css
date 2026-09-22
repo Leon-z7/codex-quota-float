@@ -1,0 +1,37 @@
+:root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: transparent; color: #f7f6fb; }
+body { padding: 10px; overflow: hidden; }
+#shell { background: rgba(25, 25, 34, .97); border: 1px solid rgba(255,255,255,.11); border-radius: 18px; box-shadow: 0 12px 34px rgba(0,0,0,.45); overflow: hidden; }
+#bar { height: 90px; display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+.drag-region { -webkit-app-region: drag; }
+.no-drag, input, button { -webkit-app-region: no-drag; }
+.grip { color: #777584; font-size: 20px; }
+.meters { flex: 1; display: flex; gap: 18px; min-width: 0; }
+.meter { flex: 1; min-width: 0; }
+.meter-head, .meter-foot { display: flex; justify-content: space-between; gap: 8px; }
+.meter-head { font-size: 12px; color: #bbb9c7; }
+.remaining { font-weight: 750; }
+.track { height: 7px; margin: 8px 0 6px; background: rgba(255,255,255,.10); border-radius: 99px; overflow: hidden; }
+.fill { height: 100%; border-radius: inherit; }
+.meter-foot { font-size: 10px; color: #858391; white-space: nowrap; overflow: hidden; }
+.loading { color: #bbb9c7; align-self: center; }
+.icon { width: 32px; height: 32px; border: 0; border-radius: 10px; color: #d5d3df; background: transparent; font-size: 20px; cursor: pointer; }
+.icon:hover { background: rgba(255,255,255,.08); }
+#details { height: 398px; padding: 4px 18px 18px; overflow-y: auto; }
+.status-row { display: flex; align-items: center; gap: 8px; }
+.status-row strong { margin-right: auto; }
+.chip { font-size: 11px; padding: 5px 9px; border-radius: 99px; color: #55d6a8; background: rgba(85,214,168,.13); }
+.chip.muted { color: #918f9c; background: rgba(145,143,156,.13); }
+.chip.bad { color: #ffb454; background: rgba(255,180,84,.13); }
+.message { min-height: 20px; color: #ffbf6c; font-size: 12px; }
+.panel { margin-top: 10px; padding: 14px; border-radius: 14px; background: rgba(255,255,255,.04); }
+.panel h2 { font-size: 15px; margin: 0 0 4px; }
+.panel p { margin: 4px 0 12px; color: #aaa8b5; font-size: 12px; line-height: 1.5; }
+label { display: block; margin: 9px 0; color: #bbb9c7; font-size: 12px; }
+input { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid rgba(255,255,255,.13); border-radius: 9px; background: #111118; color: #f7f6fb; outline: none; }
+input:focus { border-color: #8b5cf6; }
+button { border: 0; border-radius: 10px; padding: 9px 14px; background: #8b5cf6; color: white; cursor: pointer; }
+button.secondary { background: rgba(255,255,255,.09); color: #dddbe5; }
+.actions { display: flex; gap: 9px; }
+

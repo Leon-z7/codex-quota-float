@@ -1,0 +1,19 @@
+{
+  "name": "codex-quota-float-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Always-on-top Codex quota bar for Windows",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "package:win": "electron-packager . CodexQuotaFloat --platform=win32 --arch=x64 --out=release --overwrite --prune=true --icon=assets/icon.ico --ignore='^/release($|/)' --ignore='^/test($|/)'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.116.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.4.3"
+  }
+}

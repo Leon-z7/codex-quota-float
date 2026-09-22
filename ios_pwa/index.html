@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b10" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Codex 额度" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Codex 额度</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="quota-bar">
+        <div class="brand"><span class="orb"></span><span>Codex</span></div>
+        <div id="meters" class="meters"><span class="muted">等待额度数据</span></div>
+        <button id="refresh" aria-label="刷新额度">↻</button>
+      </header>
+
+      <main>
+        <section class="hero">
+          <span id="sync-chip" class="chip">尚未配置</span>
+          <h1>额度随时可见</h1>
+          <p>此页面每 30 秒同步一次；切回应用时会立即刷新。</p>
+          <p id="updated" class="muted"></p>
+          <p id="message" class="message"></p>
+        </section>
+
+        <section id="config-panel" class="card">
+          <h2>连接同步服务</h2>
+          <p>填写与你 Windows 端相同的 Supabase 项目。只使用 Publishable key。</p>
+          <form id="config-form">
+            <label>Supabase URL<input id="url" type="url" placeholder="https://xxxx.supabase.co" required /></label>
+            <label>Publishable key<input id="key" type="password" placeholder="sb_publishable_…" required /></label>
+            <button type="submit">保存配置</button>
+          </form>
+        </section>
+
+        <section id="auth-panel" class="card" hidden>
+          <h2>登录同步账户</h2>
+          <p>使用 Windows 端创建的同步账户；不要填写 ChatGPT 密码。</p>
+          <form id="auth-form">
+            <label>邮箱<input id="email" type="email" autocomplete="email" required /></label>
+            <label>密码<input id="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+            <button type="submit">登录</button>
+          </form>
+        </section>
+
+        <section id="account-panel" class="card" hidden>
+          <h2>跨设备同步已启用</h2>
+          <p id="account-email"></p>
+          <button id="signout" class="secondary">退出账户</button>
+        </section>
+
+        <section class="card install-help">
+          <h2>固定到 iPhone</h2>
+          <ol>
+            <li>用 Safari 打开本页面。</li>
+            <li>点“分享”→“添加到主屏幕”。</li>
+            <li>以后从主屏幕打开，即为独立应用界面。</li>
+          </ol>
+          <p class="muted">受 iOS 限制，本额度条不能覆盖显示在其他应用之上。</p>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+
