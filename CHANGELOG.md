@@ -1,3 +1,11 @@
+## 0.2.2 — 2026-10-19
+
+- Replace the existing Mini capsule with the approved centered reference design.
+- Use 20px regular blue percentage, 16px time, and centered SVG menu dots.
+- Center visible glyphs after quota and font changes; preserve dynamic sizing, details, and themes.
+- Add dependency-free Chromium verification for display scales, variable readings, and interactions.
+- Source update only; no new Windows package was built.
+
 # v0.2.1 · 2026-10-19
 
 - 新增 Mini 可选 UI，保留 Apple、Capsule、Fluent 三款现有布局与默认偏好。

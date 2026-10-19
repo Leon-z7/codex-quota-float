@@ -91,11 +91,13 @@ body[data-style="fluent"] .meter-value small { font-size: 14px; }
 /* Mini keeps a content-sized drag surface; the details panel opens below it. */
 #mini-bar { display: none; }
 body[data-style="mini"] { overflow: hidden; }
-body[data-style="mini"] #mini-bar { display: flex; align-items: center; width: max-content; height: 36px; margin-left: auto; padding: 0 6px 0 14px; gap: 6px; border: 1px solid light-dark(#ffffff,#ffffff1a); border-radius: 999px; background: var(--card); box-shadow: 0 4px 10px var(--shadow); -webkit-app-region: drag; white-space: nowrap; }
-.mini-reading { display: flex; align-items: baseline; gap: 10px; line-height: 1; font-variant-numeric: tabular-nums; transform: translateY(-1px); }
-#mini-percent { color: var(--blue); font-size: 18px; font-weight: 400; letter-spacing: -.35px; }
-#mini-time { color: var(--text); font-size: 13px; font-weight: 400; }
-#mini-more { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; padding: 0; background: transparent; color: var(--muted); line-height: 1; }
+body[data-style="mini"] #mini-bar { display: flex; align-items: center; width: max-content; height: 36px; margin-left: auto; padding: 0 16px 0 17px; gap: 8px; border: 1px solid light-dark(#e8ebef,#ffffff1a); border-radius: 999px; background: linear-gradient(165deg,light-dark(#ffffff,#303034),light-dark(#f9fafc,#29292e)); box-shadow: 0 4px 10px var(--shadow); font-family: "Segoe UI",sans-serif; -webkit-app-region: drag; white-space: nowrap; }
+.mini-reading { display: flex; align-items: center; gap: 7px; line-height: 1; font-variant-numeric: tabular-nums; }
+#mini-percent,#mini-time { display: block; font-style: normal; font-weight: 400; line-height: 1; }
+#mini-percent { color: light-dark(#347bf7,#63a8ff); font-size: 20px; letter-spacing: -.35px; }
+#mini-time { color: light-dark(#26303a,#f5f5f7); font-size: 16px; letter-spacing: -.2px; }
+.mini-baseline { display: inline-block; width: 0; height: 0; padding: 0; margin: 0; vertical-align: baseline; }
+#mini-more { display: grid; place-items: center; width: 20px; height: 26px; border: 0; border-radius: 8px; padding: 0; background: transparent; color: light-dark(#303a44,#e4e7eb); line-height: 1; }
 #mini-more svg { display: block; fill: currentColor; pointer-events: none; }
 #mini-more:hover, #mini-more[aria-expanded="true"] { background: light-dark(#00000006,#ffffff12); color: var(--text); }
 body[data-style="mini"] #shell { display: none; width: 300px; margin-top: 8px; border-radius: 18px; }

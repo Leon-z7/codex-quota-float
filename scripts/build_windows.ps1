@@ -13,7 +13,8 @@ try {
   npm run package:win
   if ($LASTEXITCODE -ne 0) { throw "Windows 打包失败。" }
   $ReleaseDir = Join-Path $DesktopRoot "release\CodexQuotaFloat-win32-x64"
-  $ZipPath = Join-Path $DesktopRoot "release\CodexQuotaFloat-Windows-x64-v0.2.1.zip"
+  $PackageVersion = (Get-Content (Join-Path $DesktopRoot "package.json") -Raw | ConvertFrom-Json).version
+  $ZipPath = Join-Path $DesktopRoot "release\CodexQuotaFloat-Windows-x64-v$PackageVersion.zip"
   Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $ReleaseDir).FullName -DestinationPath $ZipPath -Force
   Write-Host "Windows 程序已生成：$ZipPath"
 } finally { Pop-Location }
