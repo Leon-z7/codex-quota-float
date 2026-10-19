@@ -5,11 +5,24 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeTheme } = require
 const { CodexClient } = require('./codex-client.cjs');
 const { resizeRequest } = require('./window-layout.cjs');
 const { loadPreferences, savePreferences } = require('./preferences.cjs');
-let mainWindow, tray, codex, pollTimer, pollPromise;
+let mainWindow, tray, codex, pollTimer, pollPromise, hoverTimer;
 let snapshot = null, settings, preferencesPath;
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
 let quitting = false;
-const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 168 };
+const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 168, percent: 104 };
+const compactStyle = () => settings.style === 'mini' || settings.style === 'percent';
+
+// Native drag regions do not reliably dispatch DOM mouse events on Windows.
+// Poll the cursor only for this style, preserving native dragging of the capsule.
+function configureHover() {
+  clearInterval(hoverTimer);
+  if (settings.style !== 'percent') return;
+  hoverTimer = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+    const cursor = screen.getCursorScreenPoint(), bounds = mainWindow.getBounds();
+    send('window:pointer', { x: cursor.x - bounds.x, y: cursor.y - bounds.y });
+  }, 90);
+}
 
 function send(channel, value) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, value);
@@ -62,7 +75,7 @@ function createWindow() {
     moveTimer = setTimeout(() => {
       if (mainWindow.isDestroyed()) return;
       const bounds = mainWindow.getBounds();
-      const x = settings.style === 'mini' ? bounds.x + bounds.width - WIDTHS.mini : bounds.x;
+      const x = compactStyle() ? bounds.x + bounds.width - WIDTHS[settings.style] : bounds.x;
       const y = bounds.y;
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'window-position.json'), JSON.stringify({ x, y })); } catch {}
     }, 300);
@@ -83,7 +96,8 @@ function updateSettings(patch) {
   settings = next;
   nativeTheme.themeSource = next.theme;
   mainWindow.setAlwaysOnTop(next.alwaysOnTop, 'floating');
-  if (next.style !== 'mini') clampBounds(WIDTHS[next.style], mainWindow.getBounds().height);
+  if (!compactStyle()) clampBounds(WIDTHS[next.style], mainWindow.getBounds().height);
+  configureHover();
   configurePoll();
   refreshTray();
   send('settings:changed', settings);
@@ -124,7 +138,7 @@ function registerIpc() {
   });
   ipcMain.handle('window:resize', (_event, request) => {
     const size = resizeRequest(settings.style, request);
-    if (size) clampBounds(size.width, size.height, settings.style === 'mini');
+    if (size) clampBounds(size.width, size.height, compactStyle());
   });
   ipcMain.handle('window:hide', () => mainWindow.hide());
   ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
@@ -138,9 +152,10 @@ else {
     nativeTheme.themeSource = settings.theme;
     registerIpc();
     createWindow();
+    configureHover();
     configurePoll();
     refresh().catch(() => {});
   });
-  app.on('before-quit', () => { quitting = true; clearInterval(pollTimer); codex?.close(); });
+  app.on('before-quit', () => { quitting = true; clearInterval(pollTimer); clearInterval(hoverTimer); codex?.close(); });
   app.on('window-all-closed', () => app.quit());
 }

@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('quotaApp', {
   onSnapshot: callback => subscribe('quota:snapshot', callback),
   onStatus: callback => subscribe('quota:status', callback),
   onSettings: callback => subscribe('settings:changed', callback),
+  onPointer: callback => subscribe('window:pointer', callback),
 });

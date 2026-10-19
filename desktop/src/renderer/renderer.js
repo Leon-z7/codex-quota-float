@@ -5,6 +5,11 @@ let snapshot = null;
 let settings = { style: 'apple', theme: 'system', alwaysOnTop: true, refreshSeconds: 60 };
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
 let bucketId = null, busy = false, expanded = false, miniOpen = false;
+const compactStyle = () => settings.style === 'mini' || settings.style === 'percent';
+let hoverCloseTimer;
+let nativeSelectOpen = false;
+let suppressHover = false;
+let keyboardInteraction = false;
 
 function durationLabel(minutes) {
   if (minutes === 10080) return '周额度';
@@ -17,7 +22,7 @@ function resetLabel(seconds) {
   const date = new Date(seconds * 1000), now = new Date();
   if (date <= now) return '等待服务端更新';
   const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  if (settings.style === 'mini') return date.getFullYear() + '年' + (date.getMonth()+1) + '月' + date.getDate() + '日 ' + time;
+  if (compactStyle()) return date.getFullYear() + '年' + (date.getMonth()+1) + '月' + date.getDate() + '日 ' + time;
   return date.toDateString() === now.toDateString() ? '今天 ' + time : (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + time;
 }
 function element(tag, className, text) {
@@ -46,7 +51,7 @@ function meter(value) {
 }
 function renderMini(windows) {
   // A secondary-only weekly response must never masquerade as the short window.
-  const short = windows.filter(w => w.windowDurationMins > 0 && w.windowDurationMins < 10080)
+  const short = windows.filter(w => settings.style === 'percent' ? w.windowDurationMins === 300 : w.windowDurationMins > 0 && w.windowDurationMins < 10080)
     .sort((a,b) => a.windowDurationMins - b.windowDurationMins)[0];
   $('#mini-percent').textContent = short ? Math.max(0, Math.min(100, 100 - short.usedPercent)).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + '%' : '—%';
   const validTime = short && Number.isFinite(short.resetsAt) && short.resetsAt * 1000 > Date.now();
@@ -56,12 +61,31 @@ function renderMini(windows) {
   requestMeasure();
 }
 function setMiniOpen(open, restoreFocus = false) {
+  clearTimeout(hoverCloseTimer);
   miniOpen = open;
   document.body.dataset.details = String(open);
+  $('#mini-bar').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-label', open ? '收起额度详情和设置' : '展开额度详情和设置');
-  if (restoreFocus) $('#mini-more').focus();
+  if (restoreFocus) (settings.style === 'percent' ? $('#mini-bar') : $('#mini-more')).focus();
   requestMeasure();
+}
+function hoverDetails(inside) {
+  if (settings.style !== 'percent') return;
+  if (inside) {
+    clearTimeout(hoverCloseTimer);
+    hoverCloseTimer = null;
+    if (!suppressHover && !miniOpen) setMiniOpen(true);
+  } else {
+    suppressHover = false;
+    if (miniOpen && !nativeSelectOpen && !hoverCloseTimer) {
+      hoverCloseTimer = setTimeout(() => {
+        hoverCloseTimer = null;
+        // Keyboard users can continue interacting with the dropdown.
+        if (!keyboardInteraction || !$('#shell').contains(document.activeElement)) setMiniOpen(false);
+      }, 280);
+    }
+  }
 }
 function renderMeters() {
   const buckets = snapshot?.buckets || [];
@@ -94,9 +118,18 @@ function renderStatus() {
   $('#error').textContent = status.level === 'error' ? status.message + '。请确认已安装官方 Codex CLI，并使用 ChatGPT 账户登录；应用将自动重试。' : '';
 }
 function renderSettings(value) {
-  if (settings.style !== value.style) { setMiniOpen(false); expanded = false; }
+  if (settings.style !== value.style) { setMiniOpen(false); expanded = false; suppressHover = false; }
   settings = value;
-  $('#settings').hidden = value.style === 'mini' ? false : !expanded;
+  $('#settings').hidden = compactStyle() ? false : !expanded;
+  $('#mini-bar').tabIndex = value.style === 'percent' ? 0 : -1;
+  if (value.style === 'percent') {
+    $('#mini-bar').setAttribute('role', 'button');
+    $('#mini-bar').setAttribute('aria-label', '五小时剩余额度，悬停或按回车展开完整信息');
+    $('#mini-bar').setAttribute('aria-controls', 'shell');
+  } else {
+    $('#mini-bar').removeAttribute('role');
+    $('#mini-bar').removeAttribute('aria-controls');
+  }
   document.body.dataset.style = value.style;
   document.body.dataset.theme = value.theme;
   $('#style').value = value.style; $('#theme').value = value.theme;
@@ -125,10 +158,44 @@ $('#toggle').addEventListener('click', () => {
   $('#toggle').setAttribute('aria-label', expanded ? '收起设置' : '展开设置');
 });
 $('#mini-more').addEventListener('click', () => setMiniOpen(!miniOpen));
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && settings.style === 'mini' && miniOpen) setMiniOpen(false, true);
+for (const node of [$('#mini-bar'), $('#shell')]) {
+  node.addEventListener('mouseenter', () => hoverDetails(true));
+  node.addEventListener('mouseleave', () => hoverDetails(false));
+}
+// This also works while the capsule is a native Windows drag region.
+api.onPointer?.(point => {
+  const inside = [$('#mini-bar'), $('#shell')].some(node => {
+    if (!node.getClientRects().length) return false;
+    const rect = node.getBoundingClientRect();
+    return point.x >= rect.left && point.x < rect.right && point.y >= rect.top && point.y < rect.bottom;
+  });
+  hoverDetails(inside);
 });
-window.addEventListener('blur', () => { if (settings.style === 'mini' && miniOpen) setMiniOpen(false); });
+$('#mini-bar').addEventListener('keydown', event => {
+  if (settings.style === 'percent' && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    keyboardInteraction = true;
+    suppressHover = false;
+    setMiniOpen(true);
+    $('#refresh').focus();
+  }
+});
+$('#shell').addEventListener('focusout', () => {
+  setTimeout(() => { if (!$('#shell').contains(document.activeElement) && !$('#shell').matches(':hover') && !$('#mini-bar').matches(':hover')) hoverDetails(false); }, 0);
+});
+for (const select of document.querySelectorAll('select')) {
+  select.addEventListener('pointerdown', () => { nativeSelectOpen = true; clearTimeout(hoverCloseTimer); hoverCloseTimer = null; });
+  for (const type of ['change', 'blur']) select.addEventListener(type, () => { nativeSelectOpen = false; });
+}
+document.addEventListener('keydown', event => {
+  if (event.key === 'Tab') keyboardInteraction = true;
+  if (event.key === 'Escape' && compactStyle() && miniOpen) { suppressHover = true; nativeSelectOpen = false; setMiniOpen(false, true); }
+});
+document.addEventListener('pointerdown', event => {
+  keyboardInteraction = false;
+  if (!event.target.closest('select')) nativeSelectOpen = false;
+});
+window.addEventListener('blur', () => { if (compactStyle() && miniOpen && !nativeSelectOpen) { suppressHover = true; setMiniOpen(false); } });
 $('#hide').addEventListener('click', () => api.hide());
 $('#quit').addEventListener('click', () => api.quit());
 $('#pin').addEventListener('click', () => patchSettings({ alwaysOnTop: !settings.alwaysOnTop }));
@@ -154,6 +221,7 @@ function alignMiniReading() {
   if (!miniTextContext) return;
   const bounds = bar.getBoundingClientRect(), center = bounds.y + bounds.height / 2;
   for (const node of [$('#mini-percent'), $('#mini-time')]) {
+    if (!node.getClientRects().length) continue;
     const style = getComputedStyle(node);
     const font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
     const key = font + '|' + node.textContent + '|' + bounds.height;
@@ -176,7 +244,7 @@ function alignMiniReading() {
 function requestMeasure() {
   cancelAnimationFrame(measureFrame);
   measureFrame = requestAnimationFrame(() => {
-    const mini = settings.style === 'mini';
+    const mini = compactStyle();
     if (mini) alignMiniReading();
     const bar = $('#mini-bar').getBoundingClientRect();
     const shell = $('#shell').getBoundingClientRect();

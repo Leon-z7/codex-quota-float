@@ -90,8 +90,8 @@ body[data-style="fluent"] .meter-value small { font-size: 14px; }
 
 /* Mini keeps a content-sized drag surface; the details panel opens below it. */
 #mini-bar { display: none; }
-body[data-style="mini"] { overflow: hidden; }
-body[data-style="mini"] #mini-bar { display: flex; align-items: center; width: max-content; height: 36px; margin-left: auto; padding: 0 16px 0 17px; gap: 8px; border: 1px solid light-dark(#e8ebef,#ffffff1a); border-radius: 999px; background: linear-gradient(165deg,light-dark(#ffffff,#303034),light-dark(#f9fafc,#29292e)); box-shadow: 0 4px 10px var(--shadow); font-family: "Segoe UI",sans-serif; -webkit-app-region: drag; white-space: nowrap; }
+body:is([data-style="mini"],[data-style="percent"]) { overflow: hidden; }
+body:is([data-style="mini"],[data-style="percent"]) #mini-bar { display: flex; align-items: center; width: max-content; height: 36px; margin-left: auto; padding: 0 16px 0 17px; gap: 8px; border: 1px solid light-dark(#e8ebef,#ffffff1a); border-radius: 999px; background: linear-gradient(165deg,light-dark(#ffffff,#303034),light-dark(#f9fafc,#29292e)); box-shadow: 0 4px 10px var(--shadow); font-family: "Segoe UI",sans-serif; -webkit-app-region: drag; white-space: nowrap; }
 .mini-reading { display: flex; align-items: center; gap: 7px; line-height: 1; font-variant-numeric: tabular-nums; }
 #mini-percent,#mini-time { display: block; font-style: normal; font-weight: 400; line-height: 1; }
 #mini-percent { color: light-dark(#347bf7,#63a8ff); font-size: 20px; letter-spacing: -.35px; }
@@ -100,17 +100,22 @@ body[data-style="mini"] #mini-bar { display: flex; align-items: center; width: m
 #mini-more { display: grid; place-items: center; width: 20px; height: 26px; border: 0; border-radius: 8px; padding: 0; background: transparent; color: light-dark(#303a44,#e4e7eb); line-height: 1; }
 #mini-more svg { display: block; fill: currentColor; pointer-events: none; }
 #mini-more:hover, #mini-more[aria-expanded="true"] { background: light-dark(#00000006,#ffffff12); color: var(--text); }
-body[data-style="mini"] #shell { display: none; width: 300px; margin-top: 8px; border-radius: 18px; }
-body[data-style="mini"][data-details="true"] #shell { display: block; }
-body[data-style="mini"] .titlebar { display: none; }
-body[data-style="mini"] .overview-label { padding: 16px 18px 8px; }
-body[data-style="mini"] .meters { grid-template-columns: 1fr; padding: 0 18px; gap: 0; }
-body[data-style="mini"] .meter { background: transparent; border-radius: 0; padding: 10px 0 12px; display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 8px; }
-body[data-style="mini"] .meter + .meter { border-top: 1px solid var(--line); }
-body[data-style="mini"] .meter-value { margin: 0; font-size: 20px; font-weight: 400; letter-spacing: -.4px; color: var(--blue); }
-body[data-style="mini"] .meter-value small { font-size: 13px; }
-body[data-style="mini"] .track { display: none; }
-body[data-style="mini"] .meter-foot { grid-column: 1/-1; margin: 0; display: flex; gap: 8px; }
-body[data-style="mini"] .footer { padding-top: 3px; }
-body[data-style="mini"] .settings { padding: 15px 18px 18px; }
-body[data-style="mini"] .empty { min-height: 85px; }
+body:is([data-style="mini"],[data-style="percent"]) #shell { display: none; width: 300px; margin-top: 8px; border-radius: 18px; }
+body:is([data-style="mini"],[data-style="percent"])[data-details="true"] #shell { display: block; }
+body:is([data-style="mini"],[data-style="percent"]) .titlebar { display: none; }
+body:is([data-style="mini"],[data-style="percent"]) .overview-label { padding: 16px 18px 8px; }
+body:is([data-style="mini"],[data-style="percent"]) .meters { grid-template-columns: 1fr; padding: 0 18px; gap: 0; }
+body:is([data-style="mini"],[data-style="percent"]) .meter { background: transparent; border-radius: 0; padding: 10px 0 12px; display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 8px; }
+body:is([data-style="mini"],[data-style="percent"]) .meter + .meter { border-top: 1px solid var(--line); }
+body:is([data-style="mini"],[data-style="percent"]) .meter-value { margin: 0; font-size: 20px; font-weight: 400; letter-spacing: -.4px; color: var(--blue); }
+body:is([data-style="mini"],[data-style="percent"]) .meter-value small { font-size: 13px; }
+body:is([data-style="mini"],[data-style="percent"]) .track { display: none; }
+body:is([data-style="mini"],[data-style="percent"]) .meter-foot { grid-column: 1/-1; margin: 0; display: flex; gap: 8px; }
+body:is([data-style="mini"],[data-style="percent"]) .footer { padding-top: 3px; }
+body:is([data-style="mini"],[data-style="percent"]) .settings { padding: 15px 18px 18px; }
+body:is([data-style="mini"],[data-style="percent"]) .empty { min-height: 85px; }
+
+/* Percent reuses Mini typography, ink centering, and its complete dropdown. */
+body[data-style="percent"] #mini-time, body[data-style="percent"] #mini-more { display: none; }
+body[data-style="percent"] #mini-bar { padding-inline: 17px; gap: 0; }
+body[data-style="percent"] #mini-bar:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
