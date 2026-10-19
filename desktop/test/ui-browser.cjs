@@ -33,11 +33,13 @@ const { pathToFileURL } = require('node:url');
   }
   await page.selectOption('#style','mini');await fit();
   assert.equal(await page.locator('#shell').isVisible(),false);
-  assert.equal(await page.locator('#mini-bar').innerText(),'75%\n14:04\n⋯');
+  assert.equal(await page.locator('#mini-percent').textContent(),'75%');
+  assert.equal(await page.locator('#mini-time').textContent(),'14:04');
+  assert.equal(await page.locator('#mini-more circle').count(),3);
   assert.equal(await page.locator('#mini-percent').evaluate(e=>getComputedStyle(e).fontWeight),'400');
   const geometry=await page.evaluate(()=>{const r=id=>{const x=document.querySelector(id).getBoundingClientRect();return {x:x.x,y:x.y,width:x.width,height:x.height,right:x.right,bottom:x.bottom}};return {bar:r('#mini-bar'),percent:r('#mini-percent'),time:r('#mini-time'),more:r('#mini-more'),size:sizes.at(-1)}});
   assert.ok(geometry.percent.height>geometry.time.height);
-  assert.ok(geometry.more.x-geometry.time.right<=7);
+  assert.ok(geometry.more.x-geometry.time.right<=8.5);
   assert.ok(geometry.size.width<180 && geometry.size.height===60);
   await page.screenshot({path:path.join(out,'mini-light.png')});
   await page.locator('#mini-more').click();await fit();

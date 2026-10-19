@@ -9,7 +9,7 @@ let mainWindow, tray, codex, pollTimer, pollPromise;
 let snapshot = null, settings, preferencesPath;
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
 let quitting = false;
-const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 158 };
+const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 168 };
 
 function send(channel, value) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, value);

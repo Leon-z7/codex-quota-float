@@ -145,10 +145,39 @@ api.bootstrap().then(value => {
   renderSettings(value.settings); renderMeters(); renderStatus();
 }).catch(error => showError(error.message));
 let lastSize = '', measureFrame = 0;
+let miniTextContext;
+const miniTextOffsets = new WeakMap();
+function alignMiniReading() {
+  const bar = $('#mini-bar');
+  if (!bar.getClientRects().length) return;
+  miniTextContext ||= document.createElement('canvas').getContext('2d');
+  if (!miniTextContext) return;
+  const bounds = bar.getBoundingClientRect(), center = bounds.y + bounds.height / 2;
+  for (const node of [$('#mini-percent'), $('#mini-time')]) {
+    const style = getComputedStyle(node);
+    const font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+    const key = font + '|' + node.textContent + '|' + bounds.height;
+    if (miniTextOffsets.get(node) === key) continue;
+    node.style.transform = 'none';
+    const probe = element('span', 'mini-baseline');
+    probe.setAttribute('aria-hidden', 'true');
+    node.append(probe);
+    const baseline = probe.getBoundingClientRect().top;
+    probe.remove();
+    miniTextContext.font = font;
+    const metrics = miniTextContext.measureText(node.textContent);
+    const inkCenter = baseline + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2;
+    if (Number.isFinite(inkCenter)) {
+      node.style.transform = 'translateY(' + (center - inkCenter) + 'px)';
+      miniTextOffsets.set(node, key);
+    }
+  }
+}
 function requestMeasure() {
   cancelAnimationFrame(measureFrame);
   measureFrame = requestAnimationFrame(() => {
     const mini = settings.style === 'mini';
+    if (mini) alignMiniReading();
     const bar = $('#mini-bar').getBoundingClientRect();
     const shell = $('#shell').getBoundingClientRect();
     const size = mini ? { width: Math.ceil((miniOpen ? shell.width : bar.width) + 24), height: Math.ceil(bar.height + (miniOpen ? shell.height + 8 : 0) + 24) }
@@ -159,4 +188,9 @@ function requestMeasure() {
 }
 const observer = new ResizeObserver(requestMeasure);
 observer.observe($('#shell')); observer.observe($('#mini-bar'));
+document.fonts.ready.then(() => {
+  miniTextOffsets.delete($('#mini-percent'));
+  miniTextOffsets.delete($('#mini-time'));
+  requestMeasure();
+});
 setInterval(() => { renderStatus(); if (snapshot) renderMeters(); }, 15000);
