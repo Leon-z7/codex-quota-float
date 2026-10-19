@@ -117,5 +117,10 @@ body:is([data-style="mini"],[data-style="percent"]) .empty { min-height: 85px; }
 
 /* Percent reuses Mini typography, ink centering, and its complete dropdown. */
 body[data-style="percent"] #mini-time, body[data-style="percent"] #mini-more { display: none; }
-body[data-style="percent"] #mini-bar { padding-inline: 17px; gap: 0; }
+body[data-style="percent"] #mini-bar { padding-inline: 17px; gap: 0; position: absolute; left: var(--bar-left,12px); top: var(--bar-top,12px); margin: 0; }
 body[data-style="percent"] #mini-bar:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+body[data-style="percent"] #shell { position: absolute; left: 12px; top: var(--panel-top,56px); margin: 0; max-height: var(--panel-max-height,none); overflow-y: auto; opacity: 0; transform: translateY(-6px); transition: opacity 140ms ease, transform 140ms ease; }
+body[data-style="percent"][data-placement="above"] #shell { transform: translateY(6px); }
+body[data-style="percent"][data-transition="preparing"] #shell { visibility: hidden; transition: none; pointer-events: none; }
+body[data-style="percent"][data-transition="open"] #shell { opacity: 1; transform: translateY(0); }
+body[data-style="percent"][data-transition="closing"] #shell { pointer-events: none; }

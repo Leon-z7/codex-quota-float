@@ -85,6 +85,7 @@ function fixture() {
     const delay = ms => new Promise(r=>setTimeout(r,ms));
     const outside = () => run('previewTest.pointer({x:-100,y:-100})');
     await send('Page.enable'); await send('Runtime.enable'); await viewport(376,800);
+    await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     await send('Page.addScriptToEvaluateOnNewDocument', {source:'('+fixture.toString()+')()'});
     await send('Page.navigate', {url:pathToFileURL(path.resolve(__dirname,'../src/renderer/index.html')).href});
     for (let i=0;i<100 && !(await run('window.sizes?.length>0'));i++) await delay(30);

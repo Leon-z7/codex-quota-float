@@ -10,6 +10,11 @@ let hoverCloseTimer;
 let nativeSelectOpen = false;
 let suppressHover = false;
 let keyboardInteraction = false;
+let percentPhase = 'closed', percentVersion = 0, percentCloseTimer, appliedLayoutRevision = 0;
+let focusPercentPanel = false;
+let percentViewportReady = false;
+let percentResizeChain = Promise.resolve();
+const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
 function durationLabel(minutes) {
   if (minutes === 10080) return '周额度';
@@ -60,14 +65,37 @@ function renderMini(windows) {
   $('#mini-percent').setAttribute('aria-label', short ? durationLabel(short.windowDurationMins) + '剩余 ' + $('#mini-percent').textContent : '短期额度暂不可用');
   requestMeasure();
 }
-function setMiniOpen(open, restoreFocus = false) {
+function setMiniOpen(open, restoreFocus = false, immediate = false) {
   clearTimeout(hoverCloseTimer);
-  miniOpen = open;
-  document.body.dataset.details = String(open);
+  clearTimeout(percentCloseTimer);
+  if (!open) focusPercentPanel = false;
+  const version = ++percentVersion;
   $('#mini-bar').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-label', open ? '收起额度详情和设置' : '展开额度详情和设置');
   if (restoreFocus) (settings.style === 'percent' ? $('#mini-bar') : $('#mini-more')).focus();
+  if (settings.style === 'percent' && open && miniOpen && percentPhase === 'closing' && percentViewportReady) {
+    // Reverse an in-flight fade instead of hiding the panel and starting over.
+    percentPhase = document.body.dataset.transition = 'open';
+    if (focusPercentPanel) { focusPercentPanel = false; $('#refresh').focus(); }
+    return;
+  }
+  if (settings.style === 'percent' && !open && miniOpen && !immediate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    percentPhase = document.body.dataset.transition = 'closing';
+    percentCloseTimer = setTimeout(() => {
+      if (version !== percentVersion) return;
+      miniOpen = false;
+      document.body.dataset.details = 'false';
+      percentPhase = document.body.dataset.transition = 'closed';
+      lastSize = '';
+      requestMeasure();
+    }, 160);
+    return;
+  }
+  miniOpen = open;
+  document.body.dataset.details = String(open);
+  percentPhase = document.body.dataset.transition = open && settings.style === 'percent' ? 'preparing' : 'closed';
+  lastSize = '';
   requestMeasure();
 }
 function hoverDetails(inside) {
@@ -75,14 +103,14 @@ function hoverDetails(inside) {
   if (inside) {
     clearTimeout(hoverCloseTimer);
     hoverCloseTimer = null;
-    if (!suppressHover && !miniOpen) setMiniOpen(true);
+    if (!suppressHover && (!miniOpen || percentPhase === 'closing')) setMiniOpen(true);
   } else {
     suppressHover = false;
-    if (miniOpen && !nativeSelectOpen && !hoverCloseTimer) {
+    if (miniOpen && percentPhase !== 'closing' && !nativeSelectOpen && !hoverCloseTimer) {
       hoverCloseTimer = setTimeout(() => {
         hoverCloseTimer = null;
         // Keyboard users can continue interacting with the dropdown.
-        if (!keyboardInteraction || !$('#shell').contains(document.activeElement)) setMiniOpen(false);
+        if (!keyboardInteraction || (!focusPercentPanel && !$('#shell').contains(document.activeElement))) setMiniOpen(false);
       }, 280);
     }
   }
@@ -118,7 +146,12 @@ function renderStatus() {
   $('#error').textContent = status.level === 'error' ? status.message + '。请确认已安装官方 Codex CLI，并使用 ChatGPT 账户登录；应用将自动重试。' : '';
 }
 function renderSettings(value) {
-  if (settings.style !== value.style) { setMiniOpen(false); expanded = false; suppressHover = false; }
+  if (settings.style !== value.style) {
+    setMiniOpen(false, false, true); expanded = false; suppressHover = false;
+    percentViewportReady = false;
+    for (const name of ['--bar-left','--bar-top','--panel-top','--panel-max-height']) document.body.style.removeProperty(name);
+    delete document.body.dataset.placement;
+  }
   settings = value;
   $('#settings').hidden = compactStyle() ? false : !expanded;
   $('#mini-bar').tabIndex = value.style === 'percent' ? 0 : -1;
@@ -164,6 +197,7 @@ for (const node of [$('#mini-bar'), $('#shell')]) {
 }
 // This also works while the capsule is a native Windows drag region.
 api.onPointer?.(point => {
+  if (Number.isFinite(point.revision) && point.revision !== appliedLayoutRevision) return;
   const inside = [$('#mini-bar'), $('#shell')].some(node => {
     if (!node.getClientRects().length) return false;
     const rect = node.getBoundingClientRect();
@@ -176,8 +210,8 @@ $('#mini-bar').addEventListener('keydown', event => {
     event.preventDefault();
     keyboardInteraction = true;
     suppressHover = false;
+    focusPercentPanel = true;
     setMiniOpen(true);
-    $('#refresh').focus();
   }
 });
 $('#shell').addEventListener('focusout', () => {
@@ -248,6 +282,36 @@ function requestMeasure() {
     if (mini) alignMiniReading();
     const bar = $('#mini-bar').getBoundingClientRect();
     const shell = $('#shell').getBoundingClientRect();
+    if (settings.style === 'percent') {
+      const size = {width: miniOpen ? 324 : Math.ceil(bar.width + 24),
+        height: miniOpen ? Math.ceil($('#shell').scrollHeight + 2 + 68) : 60,
+        barWidth: Math.ceil(bar.width + 24), expanded: miniOpen};
+      const key = JSON.stringify(size), version = percentVersion;
+      if (key === lastSize) return;
+      lastSize = key;
+      // Serialize native changes. Reveal only after the matching viewport exists.
+      percentResizeChain = percentResizeChain.catch(() => {}).then(async () => {
+        if (settings.style !== 'percent' || version !== percentVersion) return;
+        const layout = await api.resize(size);
+        if (settings.style !== 'percent') return;
+        percentViewportReady = size.expanded;
+        if (layout) {
+          appliedLayoutRevision = layout.revision;
+          const style = document.body.style;
+          style.setProperty('--bar-left', layout.barLeft + 'px');
+          style.setProperty('--bar-top', layout.barTop + 'px');
+          style.setProperty('--panel-top', layout.panelTop + 'px');
+          style.setProperty('--panel-max-height', layout.panelMaxHeight + 'px');
+          document.body.dataset.placement = layout.placement;
+        }
+        await nextPaint();
+        if (version === percentVersion && miniOpen && percentPhase === 'preparing') {
+          percentPhase = document.body.dataset.transition = 'open';
+          if (focusPercentPanel) { focusPercentPanel = false; $('#refresh').focus(); }
+        }
+      }).catch(error => { lastSize = ''; showError(error.message); });
+      return;
+    }
     const size = mini ? { width: Math.ceil((miniOpen ? shell.width : bar.width) + 24), height: Math.ceil(bar.height + (miniOpen ? shell.height + 8 : 0) + 24) }
       : { height: Math.ceil(shell.height + 24) };
     const key = JSON.stringify(size);
