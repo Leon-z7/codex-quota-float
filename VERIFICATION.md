@@ -1,3 +1,7 @@
+# v0.2.5 verification
+
+See [native popup verification](docs/percent-native-fix.md). The native Electron regression passes with zero capsule move/resize events during hover. Previous Chromium-only checks do not establish native compositor behavior.
+
 # v0.2.4 验证记录
 
 - 11 项逻辑测试通过；覆盖 16 个屏幕边缘位置各 20 次展开/收起，胶囊坐标保持不变。

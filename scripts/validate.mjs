@@ -5,7 +5,7 @@ for (const file of ['desktop/package.json','desktop/package-lock.json','desktop/
   if (!existsSync(join(root,file))) throw new Error('Missing '+file);
 }
 const pkg=JSON.parse(readFileSync(join(root,'desktop/package.json'),'utf8'));
-if (pkg.version !== '0.2.4') throw new Error('Version mismatch');
+if (pkg.version !== '0.2.5') throw new Error('Version mismatch');
 if (Object.keys(pkg.dependencies||{}).length) throw new Error('Unexpected runtime dependency');
 const lock=JSON.parse(readFileSync(join(root,'desktop/package-lock.json'),'utf8'));
 if (Object.keys(lock.packages).some(name=>name.includes('@supabase'))) throw new Error('Remote dependency remains');

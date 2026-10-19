@@ -1,4 +1,4 @@
-# Codex Quota Float · Windows v0.2.4
+# Codex Quota Float · Windows v0.2.5
 
 Windows 本机 Codex 额度悬浮窗。默认采用 Apple 风格卡片，提供紧凑胶囊、Fluent 面板和 Mini 极简胶囊。支持浅色、深色、跟随系统。
 

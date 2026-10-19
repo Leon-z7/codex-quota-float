@@ -1,6 +1,44 @@
 'use strict';
 const $ = selector => document.querySelector(selector);
 const api = window.quotaApp;
+const panelSurface = new URLSearchParams(location.search).get('surface') === 'percent-panel';
+const detachedDropdown = typeof api.dropdown === 'function';
+document.body.dataset.surface = panelSurface ? 'percent-panel' : detachedDropdown ? 'capsule' : 'inline-preview';
+let resolvePanelReady;
+window.percentPanelReady = new Promise(resolve => { resolvePanelReady = resolve; });
+let popupVersion = 0, popupTimer;
+api.onDropdownLayout?.(layout => {
+  document.body.dataset.placement = layout.placement;
+  document.body.style.setProperty('--panel-max-height', layout.panelMaxHeight + 'px');
+});
+api.onDropdown?.(state => {
+  if (!panelSurface) return;
+  popupVersion = state.version;
+  clearTimeout(popupTimer);
+  document.body.dataset.details = 'true';
+  if (state.immediate) { document.body.dataset.transition = 'closed'; return; }
+  if (state.open) {
+    const reveal = () => {
+      if (popupVersion !== state.version) return;
+      document.body.dataset.transition = 'open';
+      if (state.focus) $('#refresh').focus();
+    };
+    if (document.body.dataset.transition === 'closing') reveal();
+    else requestAnimationFrame(() => requestAnimationFrame(reveal));
+  } else {
+    document.body.dataset.transition = 'closing';
+    popupTimer = setTimeout(() => {
+      if (popupVersion !== state.version) return;
+      document.body.dataset.transition = 'closed';
+      api.dropdownClosed(state.version);
+    }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160);
+  }
+});
+api.onDropdownDismiss?.(() => {
+  if (panelSurface) return;
+  suppressHover = true;
+  setMiniOpen(false, true);
+});
 let snapshot = null;
 let settings = { style: 'apple', theme: 'system', alwaysOnTop: true, refreshSeconds: 60 };
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
@@ -73,6 +111,18 @@ function setMiniOpen(open, restoreFocus = false, immediate = false) {
   $('#mini-bar').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-expanded', String(open));
   $('#mini-more').setAttribute('aria-label', open ? '收起额度详情和设置' : '展开额度详情和设置');
+  if (settings.style === 'percent' && detachedDropdown && !panelSurface) {
+    miniOpen = open;
+    document.body.dataset.details = 'false';
+    percentPhase = document.body.dataset.transition = open ? 'preparing' : 'closed';
+    if (restoreFocus) $('#mini-bar').focus();
+    const focus = focusPercentPanel;
+    focusPercentPanel = false;
+    api.dropdown({ open, focus }).then(() => {
+      if (version === percentVersion && miniOpen) percentPhase = document.body.dataset.transition = 'open';
+    }).catch(error => { miniOpen = false; percentPhase = 'closed'; showError(error.message); });
+    return;
+  }
   if (restoreFocus) (settings.style === 'percent' ? $('#mini-bar') : $('#mini-more')).focus();
   if (settings.style === 'percent' && open && miniOpen && percentPhase === 'closing' && percentViewportReady) {
     // Reverse an in-flight fade instead of hiding the panel and starting over.
@@ -99,7 +149,7 @@ function setMiniOpen(open, restoreFocus = false, immediate = false) {
   requestMeasure();
 }
 function hoverDetails(inside) {
-  if (settings.style !== 'percent') return;
+  if (settings.style !== 'percent' || panelSurface) return;
   if (inside) {
     clearTimeout(hoverCloseTimer);
     hoverCloseTimer = null;
@@ -153,6 +203,10 @@ function renderSettings(value) {
     delete document.body.dataset.placement;
   }
   settings = value;
+  if (panelSurface) {
+    miniOpen = true;
+    document.body.dataset.details = 'true';
+  }
   $('#settings').hidden = compactStyle() ? false : !expanded;
   $('#mini-bar').tabIndex = value.style === 'percent' ? 0 : -1;
   if (value.style === 'percent') {
@@ -192,11 +246,13 @@ $('#toggle').addEventListener('click', () => {
 });
 $('#mini-more').addEventListener('click', () => setMiniOpen(!miniOpen));
 for (const node of [$('#mini-bar'), $('#shell')]) {
-  node.addEventListener('mouseenter', () => hoverDetails(true));
-  node.addEventListener('mouseleave', () => hoverDetails(false));
+  // Native cursor polling owns detached hover state across both windows.
+  node.addEventListener('mouseenter', () => { if (!detachedDropdown) hoverDetails(true); });
+  node.addEventListener('mouseleave', () => { if (!detachedDropdown) hoverDetails(false); });
 }
 // This also works while the capsule is a native Windows drag region.
 api.onPointer?.(point => {
+  if (detachedDropdown) { hoverDetails(point.inside === true); return; }
   if (Number.isFinite(point.revision) && point.revision !== appliedLayoutRevision) return;
   const inside = [$('#mini-bar'), $('#shell')].some(node => {
     if (!node.getClientRects().length) return false;
@@ -218,18 +274,21 @@ $('#shell').addEventListener('focusout', () => {
   setTimeout(() => { if (!$('#shell').contains(document.activeElement) && !$('#shell').matches(':hover') && !$('#mini-bar').matches(':hover')) hoverDetails(false); }, 0);
 });
 for (const select of document.querySelectorAll('select')) {
-  select.addEventListener('pointerdown', () => { nativeSelectOpen = true; clearTimeout(hoverCloseTimer); hoverCloseTimer = null; });
-  for (const type of ['change', 'blur']) select.addEventListener(type, () => { nativeSelectOpen = false; });
+  select.addEventListener('pointerdown', () => { nativeSelectOpen = true; clearTimeout(hoverCloseTimer); hoverCloseTimer = null; if (panelSurface) api.holdDropdown(true); });
+  for (const type of ['change', 'blur']) select.addEventListener(type, () => { nativeSelectOpen = false; if (panelSurface) api.holdDropdown(false); });
+  select.addEventListener('keyup', event => { if (event.key === 'Escape') { nativeSelectOpen = false; if (panelSurface) api.holdDropdown(false); } });
 }
 document.addEventListener('keydown', event => {
+  if (panelSurface && event.key === 'Escape') { api.holdDropdown(false); api.dismissDropdown(); return; }
   if (event.key === 'Tab') keyboardInteraction = true;
   if (event.key === 'Escape' && compactStyle() && miniOpen) { suppressHover = true; nativeSelectOpen = false; setMiniOpen(false, true); }
 });
 document.addEventListener('pointerdown', event => {
   keyboardInteraction = false;
   if (!event.target.closest('select')) nativeSelectOpen = false;
+  if (panelSurface && !event.target.closest('select')) api.holdDropdown(false);
 });
-window.addEventListener('blur', () => { if (compactStyle() && miniOpen && !nativeSelectOpen) { suppressHover = true; setMiniOpen(false); } });
+window.addEventListener('blur', () => { if (settings.style === 'percent' && detachedDropdown) return; if (compactStyle() && miniOpen && !nativeSelectOpen) { suppressHover = true; setMiniOpen(false); } });
 $('#hide').addEventListener('click', () => api.hide());
 $('#quit').addEventListener('click', () => api.quit());
 $('#pin').addEventListener('click', () => patchSettings({ alwaysOnTop: !settings.alwaysOnTop }));
@@ -237,12 +296,14 @@ $('#style').addEventListener('change', event => patchSettings({ style: event.tar
 $('#theme').addEventListener('change', event => patchSettings({ theme: event.target.value }));
 $('#interval').addEventListener('change', event => patchSettings({ refreshSeconds: Number(event.target.value) }));
 $('#top').addEventListener('change', event => patchSettings({ alwaysOnTop: event.target.checked }));
-$('#bucket').addEventListener('change', event => { bucketId = event.target.value; renderMeters(); });
+$('#bucket').addEventListener('change', event => { bucketId = event.target.value; api.selectBucket?.(bucketId); renderMeters(); });
+api.onBucket?.(value => { bucketId = value; renderMeters(); });
 api.onSnapshot(value => { snapshot = value; renderMeters(); renderStatus(); });
 api.onStatus(value => { status = value; renderStatus(); if (!snapshot) renderMeters(); });
 api.onSettings(renderSettings);
 api.bootstrap().then(value => {
   snapshot = value.snapshot; status = value.status;
+  bucketId = value.bucketId || null;
   renderSettings(value.settings); renderMeters(); renderStatus();
 }).catch(error => showError(error.message));
 let lastSize = '', measureFrame = 0;
@@ -282,6 +343,21 @@ function requestMeasure() {
     if (mini) alignMiniReading();
     const bar = $('#mini-bar').getBoundingClientRect();
     const shell = $('#shell').getBoundingClientRect();
+    if (panelSurface) {
+      const height = Math.ceil($('#shell').scrollHeight + 2);
+      const key = 'panel:' + height;
+      if (key !== lastSize) {
+        lastSize = key;
+        api.resize({ panelHeight: height }).then(() => resolvePanelReady()).catch(error => { lastSize = ''; showError(error.message); });
+      }
+      return;
+    }
+    if (settings.style === 'percent' && detachedDropdown) {
+      const size = { width: Math.ceil(bar.width + 24), height: 60, expanded: false };
+      const key = JSON.stringify(size);
+      if (key !== lastSize) { lastSize = key; api.resize(size).catch(error => showError(error.message)); }
+      return;
+    }
     if (settings.style === 'percent') {
       const size = {width: miniOpen ? 324 : Math.ceil(bar.width + 24),
         height: miniOpen ? Math.ceil($('#shell').scrollHeight + 2 + 68) : 60,

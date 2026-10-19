@@ -27,4 +27,15 @@ function percentBounds(bounds, area, request, previous = null) {
   return { bounds: {x, y, width, height}, barLeft: anchorX - x + 12, barTop: anchorY - y + 12,
     panelTop: placement === 'above' ? 12 : 56, panelMaxHeight: panelHeight, placement };
 }
-module.exports = { resizeRequest, percentBounds };
+// Position only the independent dropdown; the owner bounds are read-only.
+function popupBounds(owner, area, naturalHeight) {
+  const width = Math.min(324, area.width);
+  const below = Math.max(0, area.y + area.height - (owner.y + 44));
+  const above = Math.max(0, owner.y + 16 - area.y);
+  const placement = naturalHeight + 24 > below && above > below ? 'above' : 'below';
+  const height = Math.min(naturalHeight + 24, placement === 'above' ? above : below);
+  const x = Math.max(area.x, Math.min(owner.x + owner.width - width, area.x + area.width - width));
+  const y = placement === 'above' ? owner.y + 16 - height : owner.y + 44;
+  return { bounds: { x, y, width, height: Math.max(1, height) }, placement, panelMaxHeight: Math.max(0, height - 24) };
+}
+module.exports = { resizeRequest, percentBounds, popupBounds };

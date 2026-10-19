@@ -3,13 +3,14 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeTheme } = require('electron');
 const { CodexClient } = require('./codex-client.cjs');
-const { resizeRequest, percentBounds } = require('./window-layout.cjs');
+const { resizeRequest } = require('./window-layout.cjs');
 const { loadPreferences, savePreferences } = require('./preferences.cjs');
+const { PercentPopup } = require('./percent-popup.cjs');
 let mainWindow, tray, codex, pollTimer, pollPromise, hoverTimer;
 let snapshot = null, settings, preferencesPath;
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
 let quitting = false;
-let percentLayout = null, layoutRevision = 0;
+let percentPopup, bucketId = null;
 const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 168, percent: 104 };
 const compactStyle = () => settings.style === 'mini' || settings.style === 'percent';
 
@@ -21,12 +22,16 @@ function configureHover() {
   hoverTimer = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
     const cursor = screen.getCursorScreenPoint(), bounds = mainWindow.getBounds();
-    send('window:pointer', { x: cursor.x - bounds.x, y: cursor.y - bounds.y, revision: layoutRevision });
+    const insideBar = cursor.x >= bounds.x + 12 && cursor.x < bounds.x + bounds.width - 12 &&
+      cursor.y >= bounds.y + 12 && cursor.y < bounds.y + 48;
+    mainWindow.webContents.send('window:pointer', { inside: insideBar || percentPopup?.contains(cursor) });
   }, 90);
 }
 
 function send(channel, value) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, value);
+  const popup = percentPopup?.window;
+  if (popup && !popup.isDestroyed()) popup.webContents.send(channel, value);
 }
 function setStatus(value) { status = value; send('quota:status', value); }
 function clampBounds(width, height, anchorRight = false) {
@@ -70,15 +75,17 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.showInactive());
   mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
+  mainWindow.on('hide', () => { percentPopup?.hide(); mainWindow.webContents.send('percent:dismiss'); });
+  mainWindow.on('move', () => { if (percentPopup?.open) percentPopup.layout(); });
   let moveTimer;
   mainWindow.on('moved', () => {
     clearTimeout(moveTimer);
     moveTimer = setTimeout(() => {
       if (mainWindow.isDestroyed()) return;
       const bounds = mainWindow.getBounds();
-      const x = settings.style === 'percent' ? bounds.x + (percentLayout?.barLeft ?? 12) - 12
+      const x = settings.style === 'percent' ? bounds.x
         : compactStyle() ? bounds.x + bounds.width - WIDTHS[settings.style] : bounds.x;
-      const y = bounds.y + (settings.style === 'percent' ? (percentLayout?.barTop ?? 12) - 12 : 0);
+      const y = bounds.y;
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'window-position.json'), JSON.stringify({ x, y })); } catch {}
     }, 300);
   });
@@ -95,10 +102,11 @@ function configurePoll() {
 }
 function updateSettings(patch) {
   const next = savePreferences(preferencesPath, { ...settings, ...patch });
-  if (next.style !== settings.style) percentLayout = null;
+  if (next.style !== settings.style) percentPopup?.hide();
   settings = next;
   nativeTheme.themeSource = next.theme;
   mainWindow.setAlwaysOnTop(next.alwaysOnTop, 'floating');
+  if (percentPopup?.window && !percentPopup.window.isDestroyed()) percentPopup.window.setAlwaysOnTop(next.alwaysOnTop, 'floating');
   if (!compactStyle()) clampBounds(WIDTHS[next.style], mainWindow.getBounds().height);
   configureHover();
   configurePoll();
@@ -133,21 +141,42 @@ function refresh() {
   return pollPromise;
 }
 function registerIpc() {
-  ipcMain.handle('quota:bootstrap', () => ({ snapshot, status, settings }));
+  ipcMain.handle('quota:bootstrap', () => ({ snapshot, status, settings, bucketId }));
+  ipcMain.handle('quota:bucket', (_event, value) => {
+    if (!snapshot?.buckets?.some(bucket => bucket.limitId === value)) return;
+    bucketId = value;
+    send('quota:bucket', value);
+  });
   ipcMain.handle('quota:refresh', () => refresh());
   ipcMain.handle('settings:update', (_event, patch) => {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('设置无效');
     return updateSettings(patch);
   });
-  ipcMain.handle('window:resize', (_event, request) => {
+  ipcMain.handle('percent:open', (event, value) => {
+    if (event.sender !== mainWindow.webContents || settings.style !== 'percent') return;
+    return percentPopup.setOpen(value?.open === true, value?.focus === true);
+  });
+  ipcMain.handle('percent:closed', (event, version) => {
+    if (event.sender === percentPopup?.window?.webContents) percentPopup.closed(version);
+  });
+  ipcMain.handle('percent:hold', (event, value) => {
+    if (event.sender !== percentPopup?.window?.webContents) return;
+    percentPopup.hold = value === true;
+    if (!value) percentPopup.keyboard = false;
+  });
+  ipcMain.handle('percent:dismiss', event => {
+    if (event.sender === percentPopup?.window?.webContents) mainWindow.webContents.send('percent:dismiss');
+  });
+  ipcMain.handle('window:resize', (event, request) => {
+    if (event.sender === percentPopup?.window?.webContents) return percentPopup.measure(request?.panelHeight);
     const size = resizeRequest(settings.style, request);
-    if (size && settings.style === 'percent' && Number.isFinite(request.barWidth) && typeof request.expanded === 'boolean') {
-      const bounds = mainWindow.getBounds();
-      const area = screen.getDisplayMatching(bounds).workArea;
-      percentLayout = percentBounds(bounds, area, {...size, barWidth: request.barWidth, expanded: request.expanded}, percentLayout);
-      percentLayout.revision = ++layoutRevision;
-      mainWindow.setBounds(percentLayout.bounds);
-      return percentLayout;
+    if (settings.style === 'percent') {
+      // Hover state never changes this native window's bounds.
+      if (size && !request.expanded) {
+        const b = mainWindow.getBounds();
+        if (b.width !== size.width || b.height !== 60) mainWindow.setBounds({ ...b, width: size.width, height: 60 });
+      }
+      return;
     }
     if (size) clampBounds(size.width, size.height, compactStyle());
   });
@@ -163,10 +192,12 @@ else {
     nativeTheme.themeSource = settings.theme;
     registerIpc();
     createWindow();
+    percentPopup = new PercentPopup({ BrowserWindow, screen, owner: () => mainWindow, settings: () => settings,
+      dismiss: () => mainWindow.webContents.send('percent:dismiss') });
     configureHover();
     configurePoll();
     refresh().catch(() => {});
   });
-  app.on('before-quit', () => { quitting = true; clearInterval(pollTimer); clearInterval(hoverTimer); codex?.close(); });
+  app.on('before-quit', () => { quitting = true; percentPopup?.destroy(); clearInterval(pollTimer); clearInterval(hoverTimer); codex?.close(); });
   app.on('window-all-closed', () => app.quit());
 }

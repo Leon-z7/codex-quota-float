@@ -1,3 +1,11 @@
+# v0.2.5
+
+- Keep the Percent capsule stationary by rendering its dropdown in a separate native window.
+- Preserve fade reversal, edge placement, settings focus, native selects and keyboard interaction.
+- Share quota-pool selection between capsule and dropdown.
+- Verify production main/preload/IPC with actual Windows BrowserWindows; see docs/percent-native-fix.md.
+- Source update only; no executable package produced.
+
 # v0.2.4
 
 - 修复百分比悬停展开时先显示、后扩容引起的裁切和跳动。

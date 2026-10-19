@@ -124,3 +124,9 @@ body[data-style="percent"][data-placement="above"] #shell { transform: translate
 body[data-style="percent"][data-transition="preparing"] #shell { visibility: hidden; transition: none; pointer-events: none; }
 body[data-style="percent"][data-transition="open"] #shell { opacity: 1; transform: translateY(0); }
 body[data-style="percent"][data-transition="closing"] #shell { pointer-events: none; }
+
+/* Native dropdown surface. Its owner always remains a small, stationary capsule. */
+body[data-surface="percent-panel"] #mini-bar { display: none !important; }
+body[data-surface="percent-panel"] #shell { display: block !important; top: 12px; width: calc(100vw - 24px); visibility: visible; }
+body[data-surface="percent-panel"] { overflow: hidden; }
+body[data-style="percent"][data-surface="capsule"] #shell { display: none; }
