@@ -1,102 +1,162 @@
 'use strict';
-
-const $ = (selector) => document.querySelector(selector);
-let expanded = false;
+const $ = selector => document.querySelector(selector);
+const api = window.quotaApp;
 let snapshot = null;
+let settings = { style: 'apple', theme: 'system', alwaysOnTop: true, refreshSeconds: 60 };
+let status = { level: 'connecting', message: '正在连接本机 Codex…' };
+let bucketId = null, busy = false, expanded = false, miniOpen = false;
 
 function durationLabel(minutes) {
-  if (minutes >= 10080) return '周额度';
-  if (minutes >= 1440) return `${Math.round(minutes / 1440)} 天`;
-  if (minutes >= 60) return `${Math.round(minutes / 60)} 小时`;
-  return `${minutes} 分钟`;
+  if (minutes === 10080) return '周额度';
+  if (minutes >= 1440) return (minutes / 1440).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 天';
+  if (minutes >= 60) return (minutes / 60).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 小时';
+  return minutes > 0 ? minutes + ' 分钟' : '额度窗口';
 }
-
 function resetLabel(seconds) {
-  const date = new Date(seconds * 1000);
-  const now = new Date();
-  const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  return date.toDateString() === now.toDateString()
-    ? `今天 ${time}`
-    : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  if (!Number.isFinite(seconds) || seconds <= 0) return '时间暂不可用';
+  const date = new Date(seconds * 1000), now = new Date();
+  if (date <= now) return '等待服务端更新';
+  const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (settings.style === 'mini') return date.getFullYear() + '年' + (date.getMonth()+1) + '月' + date.getDate() + '日 ' + time;
+  return date.toDateString() === now.toDateString() ? '今天 ' + time : (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + time;
 }
-
-function meterHtml(window) {
-  const remaining = Math.max(0, Math.min(100, 100 - window.usedPercent));
-  const color = remaining > 35 ? '#55d6a8' : remaining > 15 ? '#ffb454' : '#ff6b7a';
-  return `<div class="meter">
-    <div class="meter-head"><span>${durationLabel(window.windowDurationMins)}</span><span class="remaining" style="color:${color}">剩余 ${remaining.toFixed(0)}%</span></div>
-    <div class="track"><div class="fill" style="width:${remaining}%;background:${color}"></div></div>
-    <div class="meter-foot"><span>重置 ${resetLabel(window.resetsAt)}</span></div>
-  </div>`;
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
-
-function renderSnapshot(value) {
-  snapshot = value;
-  const windows = value.buckets.flatMap((bucket) => [bucket.primary, bucket.secondary]).filter(Boolean).slice(0, 2);
-  $('#meters').innerHTML = windows.length ? windows.map(meterHtml).join('') : '<span class="loading">暂无额度数据</span>';
+function meter(value) {
+  const remaining = Math.max(0, Math.min(100, 100 - value.usedPercent));
+  const box = element('article', 'meter' + (remaining <= 15 ? ' critical' : remaining <= 35 ? ' low' : ''));
+  const label = durationLabel(value.windowDurationMins);
+  box.append(element('span', 'meter-label', label));
+  const percent = element('div', 'meter-value', remaining.toLocaleString('zh-CN', { maximumFractionDigits: 1 }));
+  percent.append(element('small', '', '%'));
+  percent.setAttribute('aria-label', label + '剩余 ' + remaining.toFixed(1) + '%');
+  box.append(percent);
+  const track = element('div', 'track');
+  track.setAttribute('role', 'progressbar');
+  track.setAttribute('aria-label', label + '剩余');
+  track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(remaining));
+  const fill = element('div', 'fill'); fill.style.width = remaining + '%'; track.append(fill); box.append(track);
+  const foot = element('div', 'meter-foot', '下次重置');
+  foot.append(element('span', 'reset-at', resetLabel(value.resetsAt))); box.append(foot);
+  return box;
 }
-
-async function refreshCloudStatus() {
-  const status = await window.quotaApp.cloudStatus();
-  $('#cloud-config').hidden = status.configured;
-  $('#auth-form').hidden = !status.configured || status.signedIn;
-  $('#account').hidden = !status.signedIn;
-  $('#account-email').textContent = status.email || '';
-  $('#cloud-status').textContent = status.signedIn ? '跨设备已启用' : status.configured ? '等待登录' : '未配置同步';
-  $('#cloud-status').className = `chip ${status.signedIn ? '' : 'muted'}`;
+function renderMini(windows) {
+  // A secondary-only weekly response must never masquerade as the short window.
+  const short = windows.filter(w => w.windowDurationMins > 0 && w.windowDurationMins < 10080)
+    .sort((a,b) => a.windowDurationMins - b.windowDurationMins)[0];
+  $('#mini-percent').textContent = short ? Math.max(0, Math.min(100, 100 - short.usedPercent)).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + '%' : '—%';
+  const validTime = short && Number.isFinite(short.resetsAt) && short.resetsAt * 1000 > Date.now();
+  $('#mini-time').textContent = validTime ? new Date(short.resetsAt * 1000).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '--:--';
+  $('#mini-time').title = short ? '重置：' + resetLabel(short.resetsAt) : '暂无短期额度';
+  $('#mini-percent').setAttribute('aria-label', short ? durationLabel(short.windowDurationMins) + '剩余 ' + $('#mini-percent').textContent : '短期额度暂不可用');
+  requestMeasure();
 }
-
-$('#refresh').addEventListener('click', async () => {
-  try { renderSnapshot(await window.quotaApp.refresh()); }
-  catch (error) { $('#message').textContent = error.message; }
-});
-$('#toggle').addEventListener('click', async () => {
-  expanded = !expanded;
-  $('#details').hidden = !expanded;
-  $('#toggle').textContent = expanded ? '⌃' : '⌄';
-  await window.quotaApp.setExpanded(expanded);
-  if (expanded) await refreshCloudStatus();
-});
-$('#close').addEventListener('click', () => window.quotaApp.close());
-
-$('#cloud-config').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  try {
-    await window.quotaApp.configureCloud({
-      url: $('#supabase-url').value,
-      publishableKey: $('#supabase-key').value,
-    });
-    $('#message').textContent = '云端配置已保存，请登录同步账户。';
-    await refreshCloudStatus();
-  } catch (error) { $('#message').textContent = error.message; }
-});
-
-async function authenticate(create) {
-  const credentials = { email: $('#email').value, password: $('#password').value };
-  try {
-    const status = create
-      ? await window.quotaApp.signUp(credentials)
-      : await window.quotaApp.signIn(credentials);
-    $('#message').textContent = status.message || '登录成功。下一次额度刷新后会自动同步。';
-    await refreshCloudStatus();
-    if (snapshot) await window.quotaApp.refresh();
-  } catch (error) { $('#message').textContent = error.message; }
+function setMiniOpen(open, restoreFocus = false) {
+  miniOpen = open;
+  document.body.dataset.details = String(open);
+  $('#mini-more').setAttribute('aria-expanded', String(open));
+  $('#mini-more').setAttribute('aria-label', open ? '收起额度详情和设置' : '展开额度详情和设置');
+  if (restoreFocus) $('#mini-more').focus();
+  requestMeasure();
 }
-$('#auth-form').addEventListener('submit', (event) => { event.preventDefault(); authenticate(false); });
-$('#signup').addEventListener('click', () => authenticate(true));
-$('#signout').addEventListener('click', async () => { await window.quotaApp.signOut(); await refreshCloudStatus(); });
-
-window.quotaApp.onSnapshot(renderSnapshot);
-window.quotaApp.onStatus((status) => {
-  $('#local-status').textContent = status.message;
-  $('#local-status').className = `chip ${status.level === 'ok' ? '' : 'bad'}`;
-});
-window.quotaApp.onCloudUpload((result) => {
-  if (result.uploaded) {
-    $('#cloud-status').textContent = '刚刚已同步';
-    $('#cloud-status').className = 'chip';
+function renderMeters() {
+  const buckets = snapshot?.buckets || [];
+  if (!buckets.some(b => b.limitId === bucketId)) bucketId = buckets.find(b => b.limitId === 'codex')?.limitId || buckets[0]?.limitId || null;
+  const picker = $('#bucket');
+  picker.replaceChildren(...buckets.map(b => { const opt = element('option', '', b.limitName || b.limitId); opt.value = b.limitId; return opt; }));
+  picker.value = bucketId || '';
+  $('#bucket-row').hidden = buckets.length < 2;
+  const selected = buckets.find(b => b.limitId === bucketId);
+  const windows = [selected?.primary, selected?.secondary].filter(Boolean);
+  renderMini(windows);
+  const plan = snapshot?.planType;
+  $('#plan').textContent = plan ? String(plan).replace(/^./, c => c.toUpperCase()) : '';
+  if (windows.length) $('#meters').replaceChildren(...windows.map(meter));
+  else {
+    const empty = element('div', 'empty');
+    empty.append(element('div', 'empty-mark', status.level === 'error' ? '!' : '…'), element('strong', '', status.level === 'error' ? '暂时无法读取额度' : '正在读取额度'), element('p', '', status.level === 'error' ? '检查 Codex CLI 登录状态后重试' : '连接这台电脑上的 Codex'));
+    $('#meters').replaceChildren(empty);
   }
+}
+function renderStatus() {
+  const age = snapshot ? Math.max(0, (Date.now() - Date.parse(snapshot.updatedAt)) / 1000) : null;
+  const stale = age !== null && age > Math.max(120, settings.refreshSeconds * 2);
+  $('#dot').className = 'dot ' + (status.level === 'error' ? 'error' : stale ? 'stale' : status.level);
+  $('#status').textContent = status.level === 'error' ? (snapshot ? '连接中断 · 保留上次数据' : '连接失败') : stale ? '数据已过期' : status.level === 'ok' ? '本机已连接' : status.message;
+  $('#updated').textContent = age === null ? '' : age < 60 ? '刚刚更新' : Math.floor(age / 60) + ' 分钟前';
+  document.body.dataset.stale = String(stale || status.level === 'error');
+  $('#mini-bar').title = $('#status').textContent + ' · ' + $('#updated').textContent;
+  $('#error').hidden = status.level !== 'error';
+  $('#error').textContent = status.level === 'error' ? status.message + '。请确认已安装官方 Codex CLI，并使用 ChatGPT 账户登录；应用将自动重试。' : '';
+}
+function renderSettings(value) {
+  if (settings.style !== value.style) { setMiniOpen(false); expanded = false; }
+  settings = value;
+  $('#settings').hidden = value.style === 'mini' ? false : !expanded;
+  document.body.dataset.style = value.style;
+  document.body.dataset.theme = value.theme;
+  $('#style').value = value.style; $('#theme').value = value.theme;
+  $('#interval').value = String(value.refreshSeconds); $('#top').checked = value.alwaysOnTop;
+  $('#pin').setAttribute('aria-pressed', String(value.alwaysOnTop));
+  $('#pin').title = value.alwaysOnTop ? '取消置顶' : '始终置顶';
+  renderMeters();
+  renderStatus();
+  requestMeasure();
+}
+async function patchSettings(patch) {
+  try { renderSettings(await api.updateSettings(patch)); }
+  catch (error) { renderSettings(settings); showError('设置保存失败：' + error.message); }
+}
+function showError(message) { status = { level: 'error', message }; renderStatus(); }
+$('#refresh').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true; $('#refresh').disabled = true;
+  try { const value = await api.refresh(); if (value) { snapshot = value; renderMeters(); } }
+  catch (error) { showError(error.message); }
+  finally { busy = false; $('#refresh').disabled = false; }
 });
-
-window.quotaApp.lastSnapshot().then((value) => { if (value) renderSnapshot(value); });
-
+$('#toggle').addEventListener('click', () => {
+  expanded = !expanded; $('#settings').hidden = !expanded;
+  $('#toggle').setAttribute('aria-expanded', String(expanded));
+  $('#toggle').setAttribute('aria-label', expanded ? '收起设置' : '展开设置');
+});
+$('#mini-more').addEventListener('click', () => setMiniOpen(!miniOpen));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && settings.style === 'mini' && miniOpen) setMiniOpen(false, true);
+});
+window.addEventListener('blur', () => { if (settings.style === 'mini' && miniOpen) setMiniOpen(false); });
+$('#hide').addEventListener('click', () => api.hide());
+$('#quit').addEventListener('click', () => api.quit());
+$('#pin').addEventListener('click', () => patchSettings({ alwaysOnTop: !settings.alwaysOnTop }));
+$('#style').addEventListener('change', event => patchSettings({ style: event.target.value }));
+$('#theme').addEventListener('change', event => patchSettings({ theme: event.target.value }));
+$('#interval').addEventListener('change', event => patchSettings({ refreshSeconds: Number(event.target.value) }));
+$('#top').addEventListener('change', event => patchSettings({ alwaysOnTop: event.target.checked }));
+$('#bucket').addEventListener('change', event => { bucketId = event.target.value; renderMeters(); });
+api.onSnapshot(value => { snapshot = value; renderMeters(); renderStatus(); });
+api.onStatus(value => { status = value; renderStatus(); if (!snapshot) renderMeters(); });
+api.onSettings(renderSettings);
+api.bootstrap().then(value => {
+  snapshot = value.snapshot; status = value.status;
+  renderSettings(value.settings); renderMeters(); renderStatus();
+}).catch(error => showError(error.message));
+let lastSize = '', measureFrame = 0;
+function requestMeasure() {
+  cancelAnimationFrame(measureFrame);
+  measureFrame = requestAnimationFrame(() => {
+    const mini = settings.style === 'mini';
+    const bar = $('#mini-bar').getBoundingClientRect();
+    const shell = $('#shell').getBoundingClientRect();
+    const size = mini ? { width: Math.ceil((miniOpen ? shell.width : bar.width) + 24), height: Math.ceil(bar.height + (miniOpen ? shell.height + 8 : 0) + 24) }
+      : { height: Math.ceil(shell.height + 24) };
+    const key = JSON.stringify(size);
+    if (key !== lastSize) { lastSize = key; api.resize(mini ? size : size.height).catch(() => {}); }
+  });
+}
+const observer = new ResizeObserver(requestMeasure);
+observer.observe($('#shell')); observer.observe($('#mini-bar'));
+setInterval(() => { renderStatus(); if (snapshot) renderMeters(); }, 15000);

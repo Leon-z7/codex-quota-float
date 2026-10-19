@@ -32,3 +32,4 @@ test('supports the backward-compatible single bucket', () => {
   assert.equal(result.buckets[0].primary.usedPercent, 7);
 });
 
+

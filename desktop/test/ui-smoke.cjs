@@ -1,0 +1,67 @@
+'use strict';
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+app.commandLine.appendSwitch('disable-gpu');
+app.setPath('userData', path.resolve(__dirname, '../../build-cache/ui-profile'));
+app.whenReady().then(async () => {
+  const out = path.resolve(__dirname, '../../artifacts');
+  fs.mkdirSync(out, { recursive: true });
+  const win = new BrowserWindow({ width: 376, height: 340, frame: false, show: false, transparent: true, webPreferences: { preload: path.join(__dirname,'preview-preload.cjs'), contextIsolation: true, sandbox: true } });
+  const errors = [];
+  win.webContents.on('console-message', (_event, detail) => { if (detail.level === 'error') errors.push(detail.message); });
+  try {
+    await win.loadFile(path.join(__dirname, '../src/renderer/index.html'));
+    const run = code => win.webContents.executeJavaScript(code, true);
+    assert.equal(await run("document.querySelector('.meter-value').textContent"), '75%');
+    for (const [style, width] of [['apple',376],['pill',540],['fluent',404]]) {
+      win.setSize(width, 800);
+      await run("(async()=>{await quotaApp.updateSettings({style:'" + style + "'});document.querySelector('#style').value='" + style + "';document.querySelector('#style').dispatchEvent(new Event('change'));})()");
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await run("document.querySelector('#status').textContent='预览 · 演示数据'");
+      const height = await run("Math.ceil(document.querySelector('#shell').getBoundingClientRect().height+24)");
+      win.setSize(width, height);
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const overflow = await run("({horizontal:document.documentElement.scrollWidth>innerWidth,vertical:document.documentElement.scrollHeight>innerHeight})");
+      assert.equal(overflow.horizontal, false, style+' horizontal overflow');
+      assert.equal(overflow.vertical, false, style+' vertical overflow');
+      fs.writeFileSync(path.join(out, 'preview-'+style+'.png'), (await win.webContents.capturePage()).toPNG());
+      await run("document.querySelector('#theme').value='dark';document.querySelector('#theme').dispatchEvent(new Event('change'))");
+      await new Promise(resolve=>setTimeout(resolve,100));
+      fs.writeFileSync(path.join(out, 'preview-'+style+'-dark.png'),(await win.webContents.capturePage()).toPNG());
+      await run("document.querySelector('#theme').value='light';document.querySelector('#theme').dispatchEvent(new Event('change'))");
+      await new Promise(resolve=>setTimeout(resolve,100));
+      await run("document.querySelector('#toggle').click()");
+      const expandedHeight = await run("Math.ceil(document.querySelector('#shell').getBoundingClientRect().height+24)");
+      assert.ok(expandedHeight > height, style+' settings expand');
+      win.setSize(width,expandedHeight);
+      await new Promise(resolve => setTimeout(resolve,120));
+      assert.equal(await run("document.documentElement.scrollWidth>innerWidth"),false);
+      if (style === 'apple') fs.writeFileSync(path.join(out,'preview-settings.png'), (await win.webContents.capturePage()).toPNG());
+      await run("document.querySelector('#toggle').click()");
+    }
+    await run("document.querySelector('#theme').value='dark';document.querySelector('#theme').dispatchEvent(new Event('change'))");
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(await run("document.body.dataset.theme"), 'dark');
+    await run("document.querySelector('#pin').click()");
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(await run("document.querySelector('#pin').getAttribute('aria-pressed')"),'false');
+    await run("previewTest.snapshot({updatedAt:new Date(Date.now()-600000).toISOString(),buckets:[{limitId:'codex',primary:{usedPercent:99.6,windowDurationMins:300,resetsAt:null}},{limitId:'other',limitName:'Other',primary:{usedPercent:5,windowDurationMins:300,resetsAt:null}}]})");
+    assert.equal(await run("document.querySelector('#bucket-row').hidden"), false);
+    assert.equal(await run("document.querySelector('#status').textContent"), '数据已过期');
+    assert.equal(await run("document.querySelector('.meter-value').textContent"), '0.4%');
+    await run("document.querySelector('#bucket').value='other';document.querySelector('#bucket').dispatchEvent(new Event('change'))");
+    assert.equal(await run("document.querySelector('.meter-value').textContent"),'95%');
+    await run("previewTest.status({level:'error',message:'连接中断'.repeat(50)})");
+    assert.equal(await run("document.querySelector('#error').hidden"),false);
+    assert.equal(await run("document.documentElement.scrollWidth>innerWidth"),false);
+    await run("previewTest.snapshot({updatedAt:new Date().toISOString(),buckets:[]})");
+    assert.equal(await run("document.querySelectorAll('.meter').length"),0);
+    assert.ok((await run("document.querySelector('.empty strong').textContent")).includes('无法'));
+    assert.deepEqual(errors,[]);
+    fs.writeFileSync(path.join(out,'ui-check.json'),JSON.stringify({ passed:true,checks:['3 styles','settings expansion','light/dark','pin','multiple quota pools','fractional usage','stale data','long errors','empty state'], errors },null,2));
+    console.log('UI_SMOKE_PASS');
+    win.destroy(); app.quit();
+  } catch(error) { console.error(error);win.destroy();app.exit(1); }
+});

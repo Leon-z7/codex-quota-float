@@ -1,19 +1,18 @@
 'use strict';
-
 const { contextBridge, ipcRenderer } = require('electron');
-
+function subscribe(channel, callback) {
+  const handler = (_event, value) => callback(value);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
 contextBridge.exposeInMainWorld('quotaApp', {
+  bootstrap: () => ipcRenderer.invoke('quota:bootstrap'),
   refresh: () => ipcRenderer.invoke('quota:refresh'),
-  lastSnapshot: () => ipcRenderer.invoke('quota:last'),
-  setExpanded: (expanded) => ipcRenderer.invoke('window:setExpanded', expanded),
-  close: () => ipcRenderer.invoke('window:close'),
-  configureCloud: (config) => ipcRenderer.invoke('cloud:configure', config),
-  cloudStatus: () => ipcRenderer.invoke('cloud:status'),
-  signIn: (credentials) => ipcRenderer.invoke('cloud:signIn', credentials),
-  signUp: (credentials) => ipcRenderer.invoke('cloud:signUp', credentials),
-  signOut: () => ipcRenderer.invoke('cloud:signOut'),
-  onSnapshot: (callback) => ipcRenderer.on('quota:snapshot', (_event, value) => callback(value)),
-  onStatus: (callback) => ipcRenderer.on('quota:status', (_event, value) => callback(value)),
-  onCloudUpload: (callback) => ipcRenderer.on('cloud:upload', (_event, value) => callback(value)),
+  updateSettings: value => ipcRenderer.invoke('settings:update', value),
+  resize: height => ipcRenderer.invoke('window:resize', height),
+  hide: () => ipcRenderer.invoke('window:hide'),
+  quit: () => ipcRenderer.invoke('app:quit'),
+  onSnapshot: callback => subscribe('quota:snapshot', callback),
+  onStatus: callback => subscribe('quota:status', callback),
+  onSettings: callback => subscribe('settings:changed', callback),
 });
-

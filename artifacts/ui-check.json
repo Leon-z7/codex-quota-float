@@ -1,0 +1,57 @@
+{
+  "passed": true,
+  "geometry": {
+    "bar": {
+      "x": 12.421875,
+      "y": 12,
+      "width": 131.578125,
+      "height": 36,
+      "right": 144,
+      "bottom": 48
+    },
+    "percent": {
+      "x": 27.421875,
+      "y": 21.5,
+      "width": 34.421875,
+      "height": 18,
+      "right": 61.84375,
+      "bottom": 39.5
+    },
+    "time": {
+      "x": 71.84375,
+      "y": 26.5,
+      "width": 33.15625,
+      "height": 13,
+      "right": 105,
+      "bottom": 39.5
+    },
+    "more": {
+      "x": 111,
+      "y": 17,
+      "width": 26,
+      "height": 26,
+      "right": 137,
+      "bottom": 43
+    },
+    "size": {
+      "width": 156,
+      "height": 60
+    }
+  },
+  "checks": [
+    "all existing styles",
+    "mini collapsed content and dimensions",
+    "regular enlarged percentage",
+    "tight time/menu gap",
+    "weekly full reset date",
+    "refresh",
+    "always on top setting",
+    "light/dark",
+    "Escape/Enter/blur",
+    "missing short window",
+    "fractional usage",
+    "stale/error/empty",
+    "switch back"
+  ],
+  "errors": []
+}
