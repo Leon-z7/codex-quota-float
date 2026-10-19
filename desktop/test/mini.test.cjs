@@ -24,3 +24,11 @@ test('mini resize accepts a compact bar and expanded panel; rejects malformed IP
   assert.deepEqual(resizeRequest('pill',150), {width:540,height:150});
   assert.deepEqual(resizeRequest('fluent',400), {width:404,height:400});
 });
+
+test('percent style persists and resizes from a small capsule to the complete dropdown', () => {
+  const { sanitize } = require('../src/preferences.cjs');
+  assert.equal(sanitize({style:'percent'}).style, 'percent');
+  assert.deepEqual(resizeRequest('percent', {width:97.1,height:60}), {width:98,height:60});
+  assert.deepEqual(resizeRequest('percent', {width:324,height:750}), {width:324,height:750});
+  for (const bad of [null,97,{}, {width:NaN,height:60}]) assert.equal(resizeRequest('percent', bad), null);
+});

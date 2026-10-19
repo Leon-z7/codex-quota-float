@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const DEFAULTS = Object.freeze({ style: 'apple', theme: 'system', alwaysOnTop: true, refreshSeconds: 60 });
 function sanitize(input = {}) {
   return {
-    style: ['apple', 'pill', 'fluent', 'mini'].includes(input.style) ? input.style : DEFAULTS.style,
+    style: ['apple', 'pill', 'fluent', 'mini', 'percent'].includes(input.style) ? input.style : DEFAULTS.style,
     theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : DEFAULTS.theme,
     alwaysOnTop: typeof input.alwaysOnTop === 'boolean' ? input.alwaysOnTop : DEFAULTS.alwaysOnTop,
     refreshSeconds: [30, 60, 120, 300].includes(input.refreshSeconds) ? input.refreshSeconds : DEFAULTS.refreshSeconds,

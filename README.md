@@ -1,4 +1,4 @@
-# Codex Quota Float · Windows v0.2.2
+# Codex Quota Float · Windows v0.2.3
 
 Windows 本机 Codex 额度悬浮窗。默认采用 Apple 风格卡片，提供紧凑胶囊、Fluent 面板和 Mini 极简胶囊。支持浅色、深色、跟随系统。
 
@@ -15,6 +15,13 @@ Windows 本机 Codex 额度悬浮窗。默认采用 Apple 风格卡片，提供�
 - 设置中切换 Apple / Capsule / Fluent / Mini 四种布局和深浅色；窗口位置和偏好保存在本机。
 - 有多个额度池时可通过下拉框选择，默认优先 Codex 额度池。
 - 连接失败时自动重试，保留上次数据并标明中断/过期；无数据时不显示虚构百分比。
+
+## v0.2.3 更新
+
+![百分比悬停 UI 实际渲染预览（演示数据）](docs/percent-preview.png)
+
+- 新增「Percent · 百分比悬停」，在窗口样式中选择。
+- 原 Mini 胶囊继续可选。
 
 ## v0.2.2 更新
 
@@ -56,7 +63,7 @@ CLI 为获取真实额度仍需访问官方服务。应用不读取 ChatGPT 密�
 .\scripts\build_windows.ps1
 ```
 
-输出：`desktop\release\CodexQuotaFloat-Windows-x64-v0.2.2.zip`。
+输出：`desktop\release\CodexQuotaFloat-Windows-x64-v0.2.3.zip`。
 
 或逐步运行：
 

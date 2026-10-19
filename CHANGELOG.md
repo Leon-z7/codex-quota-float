@@ -1,3 +1,9 @@
+# v0.2.3
+
+- 新增 Percent 百分比悬停 UI，复用极简胶囊的字体与居中处理。
+- 常态只显示五小时剩余百分比，悬停展开完整额度、更新时间和设置，移开延迟收起。
+- 保持 Windows 原生拖动；支持键盘展开/收起、浅色/深色、无数据占位。
+
 ## 0.2.2 — 2026-10-19
 
 - Replace the existing Mini capsule with the approved centered reference design.
