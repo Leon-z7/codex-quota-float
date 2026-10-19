@@ -3,12 +3,13 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeTheme } = require('electron');
 const { CodexClient } = require('./codex-client.cjs');
-const { resizeRequest } = require('./window-layout.cjs');
+const { resizeRequest, percentBounds } = require('./window-layout.cjs');
 const { loadPreferences, savePreferences } = require('./preferences.cjs');
 let mainWindow, tray, codex, pollTimer, pollPromise, hoverTimer;
 let snapshot = null, settings, preferencesPath;
 let status = { level: 'connecting', message: '正在连接本机 Codex…' };
 let quitting = false;
+let percentLayout = null, layoutRevision = 0;
 const WIDTHS = { apple: 376, pill: 540, fluent: 404, mini: 168, percent: 104 };
 const compactStyle = () => settings.style === 'mini' || settings.style === 'percent';
 
@@ -20,7 +21,7 @@ function configureHover() {
   hoverTimer = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
     const cursor = screen.getCursorScreenPoint(), bounds = mainWindow.getBounds();
-    send('window:pointer', { x: cursor.x - bounds.x, y: cursor.y - bounds.y });
+    send('window:pointer', { x: cursor.x - bounds.x, y: cursor.y - bounds.y, revision: layoutRevision });
   }, 90);
 }
 
@@ -75,8 +76,9 @@ function createWindow() {
     moveTimer = setTimeout(() => {
       if (mainWindow.isDestroyed()) return;
       const bounds = mainWindow.getBounds();
-      const x = compactStyle() ? bounds.x + bounds.width - WIDTHS[settings.style] : bounds.x;
-      const y = bounds.y;
+      const x = settings.style === 'percent' ? bounds.x + (percentLayout?.barLeft ?? 12) - 12
+        : compactStyle() ? bounds.x + bounds.width - WIDTHS[settings.style] : bounds.x;
+      const y = bounds.y + (settings.style === 'percent' ? (percentLayout?.barTop ?? 12) - 12 : 0);
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'window-position.json'), JSON.stringify({ x, y })); } catch {}
     }, 300);
   });
@@ -93,6 +95,7 @@ function configurePoll() {
 }
 function updateSettings(patch) {
   const next = savePreferences(preferencesPath, { ...settings, ...patch });
+  if (next.style !== settings.style) percentLayout = null;
   settings = next;
   nativeTheme.themeSource = next.theme;
   mainWindow.setAlwaysOnTop(next.alwaysOnTop, 'floating');
@@ -138,6 +141,14 @@ function registerIpc() {
   });
   ipcMain.handle('window:resize', (_event, request) => {
     const size = resizeRequest(settings.style, request);
+    if (size && settings.style === 'percent' && Number.isFinite(request.barWidth) && typeof request.expanded === 'boolean') {
+      const bounds = mainWindow.getBounds();
+      const area = screen.getDisplayMatching(bounds).workArea;
+      percentLayout = percentBounds(bounds, area, {...size, barWidth: request.barWidth, expanded: request.expanded}, percentLayout);
+      percentLayout.revision = ++layoutRevision;
+      mainWindow.setBounds(percentLayout.bounds);
+      return percentLayout;
+    }
     if (size) clampBounds(size.width, size.height, compactStyle());
   });
   ipcMain.handle('window:hide', () => mainWindow.hide());
