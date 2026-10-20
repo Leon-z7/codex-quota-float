@@ -9,7 +9,7 @@
     icon: path.resolve(__dirname, '../assets/icon.ico'),
     electronZipDir: process.env.ELECTRON_ZIP_DIR || undefined,
     appVersion: require('../package.json').version, appCopyright: 'Codex Quota Float',
-    win32metadata: { ProductName: 'Codex Quota Float', FileDescription: 'Codex Quota Float for Windows' },
+    win32metadata: { CompanyName: 'Leon-z7', ProductName: 'Codex Quota Float', FileDescription: 'Codex Quota Float for Windows' },
     ignore: [/^\/release($|\/)/, /^\/test($|\/)/, /^\/scripts($|\/)/],
   });
   console.log(outputs.join('\n'));
