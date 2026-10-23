@@ -60,22 +60,26 @@ class CodexClient extends EventEmitter {
     this.proc = proc;
     const fail = error => {
       if (this.proc !== proc || this.closing) return;
-      this.ready = false;
-      this._rejectAll(error);
+      this._disconnect(error, proc);
       this.emit('status', { level: 'error', message: error.message });
-      this.proc = null;
     };
     proc.once('error', error => fail(new Error('无法启动 Codex CLI：' + error.message)));
     proc.once('exit', code => fail(new Error('Codex 连接已断开（' + (code ?? '未知') + '）')));
     this.lines = readline.createInterface({ input: proc.stdout });
-    this.lines.on('line', line => this._handleLine(line));
+    this.lines.on('line', line => { if (this.proc === proc) this._handleLine(line); });
     // Drain stderr, but never expose arbitrary logs that might contain account details.
     proc.stderr.on('data', () => {});
     proc.stdin.on('error', error => fail(new Error('Codex 通信中断：' + error.code)));
-    await this.request('initialize', { clientInfo: { name: 'codex_quota_float', title: 'Codex Quota Float', version: '0.2.1' } });
-    this.notify('initialized', {});
-    this.ready = true;
-    await this.refresh();
+    try {
+      await this.request('initialize', { clientInfo: { name: 'codex_quota_float', title: 'Codex Quota Float', version: '0.2.1' } });
+      this.notify('initialized', {});
+      await this.refresh();
+      if (this.proc !== proc) throw new Error('Codex 连接已关闭');
+      this.ready = true;
+    } catch (error) {
+      this._disconnect(error, proc);
+      throw error;
+    }
   }
   request(method, params) {
     if (!this.proc?.stdin?.writable) return Promise.reject(new Error('Codex 尚未连接'));
@@ -89,7 +93,9 @@ class CodexClient extends EventEmitter {
   }
   notify(method, params) { this._write({ method, params }); }
   async refresh() {
+    const proc = this.proc;
     const result = await this.request('account/rateLimits/read');
+    if (this.proc !== proc) throw new Error('Codex 连接已关闭');
     const snapshot = normalizeRateLimits(result);
     if (!snapshot.buckets.length) throw new Error('未返回套餐额度，请确认 Codex CLI 使用 ChatGPT 账户登录');
     this.emit('snapshot', snapshot);
@@ -121,13 +127,19 @@ class CodexClient extends EventEmitter {
     for (const pending of this.pending.values()) { clearTimeout(pending.timeout); pending.reject(error); }
     this.pending.clear();
   }
+  _disconnect(error, proc = this.proc) {
+    if (!proc || this.proc !== proc) return;
+    // Detach the old process before killing it: exit/error events and late
+    // stdout must never affect a later connection.
+    this.proc = null; this.ready = false;
+    clearTimeout(this.refreshTimer); this.refreshTimer = null;
+    this._rejectAll(error);
+    this.lines?.close(); this.lines = null;
+    proc.kill();
+  }
   close() {
     this.closing = true; this.ready = false;
-    clearTimeout(this.refreshTimer);
-    this._rejectAll(new Error('Codex 连接已关闭'));
-    this.lines?.close();
-    this.proc?.kill();
-    this.proc = null;
+    this._disconnect(new Error('Codex 连接已关闭'));
   }
 }
 function normalizeRateLimits(result, now = new Date()) {
@@ -153,3 +165,4 @@ function normalizeWindow(value) {
   };
 }
 module.exports = { CodexClient, normalizeRateLimits, resolveCommand };
+
