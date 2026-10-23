@@ -31,9 +31,25 @@ class PercentPopup {
     win.on('blur', () => {
       if (this.keyboard && !this.hold) this.dismiss();
     });
-    this.loading = win.loadFile(path.join(__dirname, 'renderer/index.html'), { query: { surface: 'percent-panel' } })
-      .then(() => win.webContents.executeJavaScript('window.percentPanelReady'))
-      .finally(() => { this.loading = null; });
+    win.on('closed', () => {
+      if (this.window !== win) return;
+      this.window = null;
+      this.open = this.hold = this.keyboard = false;
+      ++this.version;
+      clearTimeout(this.closeTimer);
+    });
+    const loading = win.loadFile(path.join(__dirname, 'renderer/index.html'), { query: { surface: 'percent-panel' } })
+      .then(() => {
+        if (win.isDestroyed()) throw new Error('详情窗口已关闭');
+        return win.webContents.executeJavaScript('window.percentPanelReady');
+      })
+      .catch(error => {
+        // A failed load is not a usable cached native window.
+        if (!win.isDestroyed()) win.destroy();
+        throw error;
+      })
+      .finally(() => { if (this.loading === loading) this.loading = null; });
+    this.loading = loading;
     return this.loading;
   }
   measure(height) {
@@ -43,7 +59,9 @@ class PercentPopup {
   }
   layout() {
     if (!this.window || this.window.isDestroyed()) return;
-    const owner = this.owner().getBounds();
+    const ownerWindow = this.owner();
+    if (!ownerWindow || ownerWindow.isDestroyed()) return;
+    const owner = ownerWindow.getBounds();
     const area = this.screen.getDisplayMatching(owner).workArea;
     const layout = popupBounds(owner, area, this.height);
     this.window.setBounds(layout.bounds);
@@ -64,7 +82,7 @@ class PercentPopup {
       return;
     }
     await this.ensure();
-    if (!this.open || version !== this.version) return;
+    if (!this.open || version !== this.version || !this.window || this.window.isDestroyed()) return;
     this.layout();
     this.window.showInactive();
     this.window.webContents.send('percent:state', { open: true, version, focus });
@@ -73,11 +91,11 @@ class PercentPopup {
   closed(version) {
     if (version !== this.version || this.open) return;
     clearTimeout(this.closeTimer);
-    this.window?.hide();
+    if (this.window && !this.window.isDestroyed()) this.window.hide();
   }
   contains(point) {
+    if (!this.window || this.window.isDestroyed() || !this.window.isVisible()) return false;
     if (this.hold || this.keyboard) return true;
-    if (!this.window?.isVisible()) return false;
     const b = this.window.getBounds();
     return point.x >= b.x + 12 && point.x < b.x + b.width - 12 &&
       point.y >= b.y + 12 && point.y < b.y + b.height - 12;
@@ -86,13 +104,16 @@ class PercentPopup {
     ++this.version;
     this.open = this.hold = this.keyboard = false;
     clearTimeout(this.closeTimer);
-    if (this.window && !this.window.isDestroyed()) this.window.webContents.send('percent:state', { open: false, immediate: true, version: this.version });
-    this.window?.hide();
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('percent:state', { open: false, immediate: true, version: this.version });
+      this.window.hide();
+    }
   }
   destroy() {
     this.hide();
-    this.window?.destroy();
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
   }
 }
 module.exports = { PercentPopup };
+
