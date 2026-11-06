@@ -59,12 +59,29 @@ test('server errors reject, disconnect cancels pending requests without leaked t
   const proc = fakeServer((msg, send) => { if (msg.method === 'initialize') send({ id: msg.id, error: { message: 'login required' } }); });
   const client = new CodexClient({ command: 'fake', spawnImpl: () => proc });
   await assert.rejects(client.start(), /login required/);
-  const pending = client.request('account/rateLimits/read');
-  proc.emit('exit', 1);
-  await assert.rejects(pending, /连接已断开/);
+  await assert.rejects(client.request('account/rateLimits/read'), /尚未连接/);
   assert.equal(client.pending.size, 0);
   assert.equal(client.ready, false);
+  assert.equal(client.proc, null);
   client.close();
+});
+test('disconnect cancels in-flight requests and releases its reader', async () => {
+  const proc = fakeServer((msg, send) => {
+    if (msg.method === 'unanswered') return;
+    if (msg.id) send({ id: msg.id, result: msg.method === 'initialize' ? {} : {
+      rateLimits: { primary: { usedPercent: 20 } },
+    }});
+  });
+  const client = new CodexClient({ command: 'fake', spawnImpl: () => proc });
+  await client.start();
+  const reader = client.lines;
+  const pending = client.request('unanswered');
+  proc.emit('exit', 1);
+  await assert.rejects(pending, /连接已断开/);
+  assert.equal(reader.closed, true);
+  assert.equal(client.pending.size, 0);
+  assert.equal(client.ready, false);
+  assert.equal(client.proc, null);
 });
 test('preferences survive restart, invalid and obsolete settings are discarded', () => {
   const dir = fs.mkdtempSync(path.join(__dirname, 'quota-test-'));
@@ -78,3 +95,4 @@ test('preferences survive restart, invalid and obsolete settings are discarded',
     assert.equal(loadPreferences(file).refreshSeconds, 60);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
